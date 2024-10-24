@@ -238,6 +238,7 @@ class LocalOrDistributedWorkerBase(WorkerBase):
                     execute_model_req.virtual_engine,
                     execute_model_req.finished_requests_ids))
             num_steps = execute_model_req.num_steps
+            print(f"num_steps:{num_steps}")
 
             if self.do_metadata_broadcast:
                 broadcast_data = worker_input.as_broadcastable_tensor_dict()

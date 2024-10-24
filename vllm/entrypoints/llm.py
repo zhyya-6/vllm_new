@@ -607,8 +607,11 @@ class LLM:
         outputs: List[Union[RequestOutput, EmbeddingRequestOutput]] = []
         total_in_toks = 0
         total_out_toks = 0
+        i=0
+        
         while self.llm_engine.has_unfinished_requests():
             step_outputs = self.llm_engine.step()
+            i=i+1
             for output in step_outputs:
                 if output.finished:
                     outputs.append(output)
@@ -627,6 +630,7 @@ class LLM:
                         pbar.update(1)
         if use_tqdm:
             pbar.close()
+        print(f"i:{i}")
         # Sort the outputs by request ID.
         # This is necessary because some requests may be finished earlier than
         # its previous requests.

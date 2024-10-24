@@ -72,12 +72,18 @@ def dummy_image_for_siglip(
     image_width_override: Optional[int] = None,
     image_height_override: Optional[int] = None,
 ):
-    width = height = hf_config.image_size
-    if image_width_override is not None:
-        width = image_width_override
-    if image_height_override is not None:
-        height = image_height_override
+    # width = height = hf_config.image_size
 
+    # if image_width_override is not None:
+    #     width = image_width_override
+    # if image_height_override is not None:
+    #     height = image_height_override
+    width=height=384
+    print("dummy image: ")
+    print("width:")
+    print(width)
+    print("height")
+    print(height)
     image = Image.new("RGB", (width, height), color=0)
     return {"image": image}
 
@@ -90,6 +96,15 @@ def input_processor_for_siglip(
     image_token_id: int,
     image_feature_size_override: Optional[int] = None,
 ):
+    # print("-----------------------")
+    # print("llm_inputs.prompt")
+    # prompt=llm_inputs.get("prompt")
+    # prompt_ids=llm_inputs["prompt_token_ids"]
+    # print("prompt")
+    # print(prompt)
+    # print(len(prompt))
+    # print(prompt_ids)
+    # print(len(prompt_ids))
     multi_modal_data = llm_inputs.get("multi_modal_data")
     if multi_modal_data is None or "image" not in multi_modal_data:
         return llm_inputs
@@ -98,6 +113,7 @@ def input_processor_for_siglip(
 
     if image_feature_size_override is None:
         image_feature_size = get_siglip_image_feature_size(hf_config)
+        # image_feature_size=729
     else:
         image_feature_size = image_feature_size_override
 
@@ -109,6 +125,8 @@ def input_processor_for_siglip(
         repeat_count=image_feature_size,
     )
 
+    # print(f"prompt:{new_prompt}")
+    # print(f"prompt_ids:{prompt_token_ids}")
     # NOTE: Create a defensive copy of the original inputs
     return LLMInputs(
         prompt_token_ids=new_token_ids,
@@ -517,10 +535,13 @@ class SiglipEncoder(nn.Module):
         inputs_embeds: torch.Tensor,
     ) -> torch.Tensor:
         hidden_states = inputs_embeds
+        all_hidden_states=(hidden_states,)
+
         for encoder_layer in self.layers:
             hidden_states, _ = encoder_layer(hidden_states)
+            all_hidden_states=all_hidden_states+(hidden_states,)
 
-        return hidden_states
+        return all_hidden_states[-2]
 
 
 class SiglipMultiheadAttentionPoolingHead(nn.Module):
@@ -598,7 +619,7 @@ class SiglipVisionTransformer(nn.Module):
         # if self.use_head:
         # pooled_output = self.head(last_hidden_state)
 
-        return last_hidden_state
+        return encoder_outputs
 
 
 class SiglipVisionModel(nn.Module):

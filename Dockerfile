@@ -5,12 +5,13 @@
 # docs/source/dev/dockerfile/dockerfile.rst and
 # docs/source/assets/dev/dockerfile-stages-dependency.png
 
-ARG CUDA_VERSION=12.4.1
+
+
+ARG CUDA_VERSION=12.1.0
 #################### BASE BUILD IMAGE ####################
 # prepare basic build environment
-FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu20.04 AS base
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-ubuntu22.04 AS base
 
-ARG CUDA_VERSION=12.4.1
 ARG PYTHON_VERSION=3.10
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -28,9 +29,19 @@ RUN echo 'tzdata tzdata/Areas select America' | debconf-set-selections \
 RUN apt-get update -y \
     && apt-get install -y git curl sudo
 
-# Install pip s.t. it will be compatible with our PYTHON_VERSION
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python${PYTHON_VERSION}
+RUN rm -rf ~/.cache/pip
+   
+# 1. 安装 pip
+RUN apt-get update -y \
+    && apt-get install -y python3-pip
+
+# 2. 确认 pip 已安装
 RUN python3 -m pip --version
+
+# 3. 更新 pip 到最新版本
+RUN python3 -m pip install --upgrade pip
+# RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
 
 # Workaround for https://github.com/openai/triton/issues/2507 and
 # https://github.com/pytorch/pytorch/issues/107960 -- hopefully
@@ -49,7 +60,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY requirements-mamba.txt requirements-mamba.txt
 RUN python3 -m pip install packaging
-RUN python3 -m pip install -r requirements-mamba.txt
+RUN PIP_NO_BUILD_ISOLATION=0 python3 -m pip install --no-cache-dir -r requirements-mamba.txt
+
 
 # cuda arch list used by torch
 # can be useful for both `dev` and `test`
@@ -138,6 +150,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python3 -m pip install -r requirements-dev.txt
 
 #################### DEV IMAGE ####################
+
 #################### MAMBA Build IMAGE ####################
 FROM dev as mamba-builder
 # max jobs used for build
@@ -156,11 +169,13 @@ RUN pip --verbose wheel -r requirements-mamba.txt \
 
 #################### vLLM installation IMAGE ####################
 # image with vLLM installed
-FROM nvidia/cuda:${CUDA_VERSION}-base-ubuntu20.04 AS vllm-base
-ARG CUDA_VERSION=12.4.1
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-ubuntu22.04 AS vllm-base
+
+ARG CUDA_VERSION=12.1.0
 ARG PYTHON_VERSION=3.10
 WORKDIR /vllm-workspace
 
+ENV DEBIAN_FRONTEND=noninteractive
 RUN echo 'tzdata tzdata/Areas select America' | debconf-set-selections \
     && echo 'tzdata tzdata/Zones/America select Los_Angeles' | debconf-set-selections \
     && apt-get update -y \
@@ -170,13 +185,38 @@ RUN echo 'tzdata tzdata/Areas select America' | debconf-set-selections \
     && apt-get install -y python${PYTHON_VERSION} python${PYTHON_VERSION}-dev python${PYTHON_VERSION}-venv \
     && if [ "${PYTHON_VERSION}" != "3" ]; then update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1; fi \
     && python3 --version
+# ENV TZ=America/Los_Angeles
+
+# RUN DEBIAN_FRONTEND=noninteractive \
+#     echo 'tzdata tzdata/Areas select America' | debconf-set-selections && \
+#     echo 'tzdata tzdata/Zones/America select Los_Angeles' | debconf-set-selections && \
+#     apt-get update -y && \
+#     apt-get install -y tzdata ccache software-properties-common \
+#     && add-apt-repository ppa:deadsnakes/ppa \
+#     && apt-get update -y \
+#     && apt-get install -y python${PYTHON_VERSION} python${PYTHON_VERSION}-dev python${PYTHON_VERSION}-venv \
+#     && if [ "${PYTHON_VERSION}" != "3" ]; then update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1; fi \
+#     && python3 --version
+
 
 RUN apt-get update -y \
     && apt-get install -y python3-pip git vim curl libibverbs-dev
 
 # Install pip s.t. it will be compatible with our PYTHON_VERSION
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python${PYTHON_VERSION}
+# RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python${PYTHON_VERSION}
+# RUN python3 -m pip --version
+# RUN apt-get install -y python3-html5lib
+# RUN python3 -m pip install --upgrade pip
+# 1. 安装 pip
+RUN apt-get update -y \
+    && apt-get install -y python3-pip
+
+# 2. 确认 pip 已安装
 RUN python3 -m pip --version
+
+# 3. 更新 pip 到最新版本
+RUN python3 -m pip install --upgrade pip
+
 
 # Workaround for https://github.com/openai/triton/issues/2507 and
 # https://github.com/pytorch/pytorch/issues/107960 -- hopefully
@@ -194,29 +234,31 @@ RUN --mount=type=bind,from=mamba-builder,src=/usr/src/mamba,target=/usr/src/mamb
     python3 -m pip install /usr/src/mamba/*.whl --no-cache-dir
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python3 -m pip install https://github.com/flashinfer-ai/flashinfer/releases/download/v0.1.2/flashinfer-0.1.2+cu121torch2.4-cp310-cp310-linux_x86_64.whl
+    python3 -m pip install https://github.com/flashinfer-ai/flashinfer/releases/download/v0.1.3/flashinfer-0.1.3+cu121torch2.4-cp310-cp310-linux_x86_64.whl
+
+
 #################### vLLM installation IMAGE ####################
 
 
-#################### TEST IMAGE ####################
-# image to run unit testing suite
-# note that this uses vllm installed by `pip`
-FROM vllm-base AS test
+# #################### TEST IMAGE ####################
+# # image to run unit testing suite
+# # note that this uses vllm installed by `pip`
+# FROM vllm-base AS test
 
-ADD . /vllm-workspace/
+# ADD . /vllm-workspace/
 
-# install development dependencies (for testing)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python3 -m pip install -r requirements-dev.txt
+# # install development dependencies (for testing)
+# RUN --mount=type=cache,target=/root/.cache/pip \
+#     python3 -m pip install -r requirements-dev.txt
 
-# doc requires source code
-# we hide them inside `test_docs/` , so that this source code
-# will not be imported by other tests
-RUN mkdir test_docs
-RUN mv docs test_docs/
-RUN mv vllm test_docs/
+# # doc requires source code
+# # we hide them inside `test_docs/` , so that this source code
+# # will not be imported by other tests
+# RUN mkdir test_docs
+# RUN mv docs test_docs/
+# RUN mv vllm test_docs/
 
-#################### TEST IMAGE ####################
+# #################### TEST IMAGE ####################
 
 #################### OPENAI API SERVER ####################
 # openai api server alternative
@@ -230,3 +272,5 @@ ENV VLLM_USAGE_SOURCE production-docker-image
 
 ENTRYPOINT ["python3", "-m", "vllm.entrypoints.openai.api_server"]
 #################### OPENAI API SERVER ####################
+
+

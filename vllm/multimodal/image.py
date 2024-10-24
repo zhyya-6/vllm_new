@@ -52,6 +52,9 @@ def repeat_and_pad_image_tokens(
         new_prompt = None
     else:
         image_token_str = tokenizer.decode(image_token_id)
+        # print("image_token_str:")
+        # print(image_token_str)
+        # print(image_token_id)
         pad_token_str_left = (None if pad_token_left is None else
                               tokenizer.decode(pad_token_left))
         pad_token_str_right = (None if pad_token_right is None else
@@ -78,6 +81,8 @@ def repeat_and_pad_image_tokens(
 
         # The image tokens are removed to be consistent with HuggingFace
         new_prompt = prompt.replace(image_token_str, replacement_str, 1)
+        # print("new_prompt")
+        # print(new_prompt)
 
     new_token_ids: List[int] = []
     for i, token in enumerate(prompt_token_ids):
@@ -95,7 +100,9 @@ def repeat_and_pad_image_tokens(
             break
         else:
             new_token_ids.append(token)
-
+    # print("new_prompt_ids")
+    # print(new_token_ids)
+    # print(len(new_token_ids))
     return new_prompt, new_token_ids
 
 
